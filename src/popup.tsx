@@ -1,11 +1,10 @@
-
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 const iconOptions = [
-  { id: 'teacher', src: 'https://img.icons8.com/color/96/000000/teacher.png', alt: 'Teacher' },
-  { id: 'assistant', src: 'https://img.icons8.com/color/96/000000/assistant.png', alt: 'Assistant' },
-  { id: 'books', src: 'https://img.icons8.com/color/96/000000/books.png', alt: 'Books' }
+  { id: 'teacher', src: 'icons/teacher.png', alt: 'Teacher' },
+  { id: 'assistant', src: 'icons/assistant.png', alt: 'Assistant' },
+  { id: 'books', src: 'icons/books.png', alt: 'Books' }
 ];
 
 const Popup = () => {
