@@ -11,6 +11,17 @@ const Popup = () => {
   const [isEnabled, setIsEnabled] = useState(false);
   const [selectedIcon, setSelectedIcon] = useState('teacher');
 
+  useEffect(() => {
+    chrome.storage.sync.get(['isEnabled', 'selectedIcon'], (result) => {
+      if (result.isEnabled !== undefined) {
+        setIsEnabled(result.isEnabled);
+      }
+      if (result.selectedIcon) {
+        setSelectedIcon(result.selectedIcon);
+      }
+    });
+  }, []);
+
   const toggleAssistant = async () => {
     const newState = !isEnabled;
     setIsEnabled(newState);
