@@ -2,12 +2,19 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-const Popup = () => {
-  const [isIconEnabled, setIsIconEnabled] = useState(false);
+const iconOptions = [
+  { id: 'teacher', src: 'https://img.icons8.com/color/96/000000/teacher.png', alt: 'Teacher' },
+  { id: 'assistant', src: 'https://img.icons8.com/color/96/000000/assistant.png', alt: 'Assistant' },
+  { id: 'books', src: 'https://img.icons8.com/color/96/000000/books.png', alt: 'Books' }
+];
 
-  const toggleIcon = async () => {
-    const newState = !isIconEnabled;
-    setIsIconEnabled(newState);
+const Popup = () => {
+  const [isEnabled, setIsEnabled] = useState(false);
+  const [selectedIcon, setSelectedIcon] = useState('teacher');
+
+  const toggleAssistant = async () => {
+    const newState = !isEnabled;
+    setIsEnabled(newState);
 
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tabs[0]?.id) {
@@ -19,77 +26,116 @@ const Popup = () => {
   };
 
   return (
-    <div style={{ 
-      padding: "20px", 
-      minWidth: "300px",
-      backgroundColor: "#f5f5f5",
-      borderRadius: "8px"
+    <div style={{
+      width: "300px",
+      padding: "20px",
+      backgroundColor: "#f8f9fa",
+      fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
     }}>
-      <h2 style={{ 
-        textAlign: "center", 
-        color: "#333",
-        marginBottom: "20px",
-        fontSize: "18px"
+      <h1 style={{
+        fontSize: "18px",
+        color: "#2c3e50",
+        textAlign: "center",
+        margin: "0 0 20px 0",
+        borderBottom: "2px solid #3498db",
+        paddingBottom: "10px"
       }}>
-        Teach Assistant
-      </h2>
-      
-      <div 
-        style={{ 
-          display: "flex", 
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: "15px"
-        }}
-      >
-        <label className="switch" style={{
-          position: "relative",
-          display: "inline-block",
-          width: "60px",
-          height: "34px"
+        TeachSmart
+        <div style={{ 
+          fontSize: "14px", 
+          color: "#7f8c8d",
+          marginTop: "5px" 
         }}>
-          <input 
-            type="checkbox"
-            checked={isIconEnabled}
-            onChange={toggleIcon}
-            style={{
-              opacity: 0,
-              width: 0,
-              height: 0
-            }}
-          />
-          <span style={{
-            position: "absolute",
+          Your Best Teaching Assistant
+        </div>
+      </h1>
+
+      <div style={{
+        marginBottom: "20px",
+        backgroundColor: "white",
+        padding: "15px",
+        borderRadius: "8px",
+        boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+      }}>
+        <label style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: "15px"
+        }}>
+          <span style={{ fontWeight: "500" }}>Enable Assistant</span>
+          <div className="toggle-switch" style={{
+            position: "relative",
+            width: "50px",
+            height: "26px",
+            backgroundColor: isEnabled ? "#2ecc71" : "#95a5a6",
+            borderRadius: "13px",
             cursor: "pointer",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: isIconEnabled ? "#4CAF50" : "#ccc",
-            transition: "0.4s",
-            borderRadius: "34px",
-            "&:before": {
+            transition: "0.3s"
+          }} onClick={toggleAssistant}>
+            <div style={{
               position: "absolute",
-              content: '""',
-              height: "26px",
-              width: "26px",
-              left: "4px",
-              bottom: "4px",
+              top: "3px",
+              left: isEnabled ? "27px" : "3px",
+              width: "20px",
+              height: "20px",
               backgroundColor: "white",
-              transition: "0.4s",
               borderRadius: "50%",
-              transform: isIconEnabled ? "translateX(26px)" : "translateX(0)"
-            }
-          }}/>
+              transition: "0.3s"
+            }}/>
+          </div>
         </label>
       </div>
-      
+
       <div style={{
-        textAlign: "center",
-        color: "#666",
-        fontSize: "14px"
+        backgroundColor: "white",
+        padding: "15px",
+        borderRadius: "8px",
+        boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
       }}>
-        {isIconEnabled ? "Assistant Enabled" : "Assistant Disabled"}
+        <h2 style={{
+          fontSize: "14px",
+          marginBottom: "10px",
+          color: "#2c3e50"
+        }}>Choose Icon</h2>
+        <div style={{
+          display: "flex",
+          justifyContent: "space-around",
+          gap: "10px"
+        }}>
+          {iconOptions.map((icon) => (
+            <div
+              key={icon.id}
+              onClick={() => setSelectedIcon(icon.id)}
+              style={{
+                padding: "5px",
+                border: selectedIcon === icon.id ? "2px solid #3498db" : "2px solid transparent",
+                borderRadius: "8px",
+                cursor: "pointer",
+                transition: "0.3s"
+              }}
+            >
+              <img
+                src={icon.src}
+                alt={icon.alt}
+                style={{
+                  width: "40px",
+                  height: "40px",
+                  opacity: selectedIcon === icon.id ? 1 : 0.6
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{
+        marginTop: "15px",
+        textAlign: "center",
+        fontSize: "12px",
+        color: "#95a5a6"
+      }}>
+        TeachSmart v1.0
       </div>
     </div>
   );
