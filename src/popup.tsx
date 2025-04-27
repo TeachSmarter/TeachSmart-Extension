@@ -2,50 +2,39 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 const Popup = () => {
-  const [count, setCount] = useState(0);
-  const [currentURL, setCurrentURL] = useState<string>();
+  const [isIconEnabled, setIsIconEnabled] = useState(false);
 
-  useEffect(() => {
-    chrome.action.setBadgeText({ text: count.toString() });
-  }, [count]);
+  const toggleIcon = async () => {
+    const newState = !isIconEnabled;
+    setIsIconEnabled(newState);
 
-  useEffect(() => {
-    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-      setCurrentURL(tabs[0].url);
-    });
-  }, []);
-
-  const changeBackground = () => {
-    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-      const tab = tabs[0];
-      if (tab.id) {
-        chrome.tabs.sendMessage(
-          tab.id,
-          {
-            color: "#555555",
-          },
-          (msg) => {
-            console.log("result message:", msg);
-          }
-        );
-      }
-    });
+    // Send message to active tab
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tabs[0]?.id) {
+      chrome.tabs.sendMessage(tabs[0].id, {
+        action: "toggleIcon",
+        show: newState
+      });
+    }
   };
 
   return (
-    <>
-      <ul style={{ minWidth: "700px" }}>
-        <li>Current URL: {currentURL}</li>
-        <li>Current Time: {new Date().toLocaleTimeString()}</li>
-      </ul>
-      <button
-        onClick={() => setCount(count + 1)}
-        style={{ marginRight: "5px" }}
+    <div style={{ padding: "20px", minWidth: "300px" }}>
+      <button 
+        onClick={toggleIcon}
+        style={{
+          padding: "10px 20px",
+          backgroundColor: isIconEnabled ? "#ff4444" : "#4CAF50",
+          color: "white",
+          border: "none",
+          borderRadius: "4px",
+          cursor: "pointer",
+          width: "100%"
+        }}
       >
-        count up
+        {isIconEnabled ? "Disable Icon" : "Enable Icon"}
       </button>
-      <button onClick={changeBackground}>change background</button>
-    </>
+    </div>
   );
 };
 
