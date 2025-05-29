@@ -1,5 +1,5 @@
 {
-  "name": "TeachSmart_ChromeExtension",
+  "name": "TeachSmart",
   "version": "1.0.0",
   "description": "TeachSmart Chrome Extension",
   "main": "index.js",
