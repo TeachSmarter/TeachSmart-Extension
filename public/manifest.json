@@ -1,9 +1,15 @@
 {
   "manifest_version": 3,
 
-  "name": "TeachSmart",
-  "description": "TeachSmart Extension",
-  "version": "1.0",
+  "name": "TeachSmart - Study Timer, Highlighter & Vocabulary Builder",
+  "description": "Boost your learning with a Pomodoro study timer, text highlighter, vocabulary builder, focus mode, and reading stats. The ultimate study companion for students and educators.",
+  "version": "2.0.0",
+
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
 
   "options_ui": {
     "page": "options.html"
@@ -11,14 +17,16 @@
 
   "action": {
     "default_icon": "icon.png",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_title": "TeachSmart - Your Study Companion"
   },
 
   "content_scripts": [
-      {
-          "matches": ["<all_urls>"],
-          "js": ["js/vendor.js", "js/content_script.js"]
-      }
+    {
+      "matches": ["<all_urls>"],
+      "js": ["js/content_script.js"],
+      "run_at": "document_idle"
+    }
   ],
 
   "background": {
@@ -26,10 +34,28 @@
   },
 
   "permissions": [
-    "storage"
+    "storage",
+    "activeTab",
+    "alarms",
+    "contextMenus"
   ],
 
   "host_permissions": [
     "<all_urls>"
-  ]
+  ],
+
+  "commands": {
+    "toggle-focus": {
+      "suggested_key": {
+        "default": "Alt+F"
+      },
+      "description": "Toggle focus mode"
+    },
+    "toggle-timer": {
+      "suggested_key": {
+        "default": "Alt+T"
+      },
+      "description": "Start/pause study timer"
+    }
+  }
 }
