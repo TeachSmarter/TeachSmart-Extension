@@ -523,6 +523,45 @@ body {
   color: #D1D5DB;
 }
 
+/* ---- Tab Badge ---- */
+.ts-badge {
+  position: absolute;
+  top: -8px;
+  right: -14px;
+  background: #EF4444;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* ---- Keyboard Hint ---- */
+.ts-kbd {
+  display: inline-block;
+  background: #F3F4F6;
+  border: 1px solid #E5E7EB;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  color: #6B7280;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* ---- Word Count ---- */
+.ts-count {
+  font-size: 12px;
+  color: #9CA3AF;
+  text-align: right;
+  margin-bottom: 8px;
+}
+
 /* ---- Animations ---- */
 @keyframes ts-fade-in {
   from { opacity: 0; transform: translateY(4px); }
@@ -531,4 +570,98 @@ body {
 
 .ts-content > * {
   animation: ts-fade-in 0.2s ease;
+}
+
+@keyframes ts-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ---- Dark mode (follows system preference) ---- */
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #1F2937;
+    color: #F9FAFB;
+  }
+  .ts-nav {
+    background: #111827;
+    border-bottom-color: #374151;
+  }
+  .ts-nav-item {
+    color: #6B7280;
+  }
+  .ts-nav-item:hover {
+    color: #A5B4FC;
+    background: #1F2937;
+  }
+  .ts-nav-item.active {
+    color: #818CF8;
+    border-bottom-color: #818CF8;
+  }
+  .ts-stat-card,
+  .ts-word-item,
+  .ts-note-item {
+    background: #111827;
+    border-color: #374151;
+  }
+  .ts-stat-card:hover,
+  .ts-word-item:hover,
+  .ts-note-item:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  .ts-stat-value {
+    color: #F9FAFB;
+  }
+  .ts-search {
+    background: #111827;
+    border-color: #374151;
+    color: #F9FAFB;
+  }
+  .ts-search:focus {
+    border-color: #818CF8;
+    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
+  }
+  .ts-search::placeholder {
+    color: #6B7280;
+  }
+  .ts-word-term {
+    color: #F9FAFB;
+  }
+  .ts-note-text {
+    color: #E5E7EB;
+  }
+  .ts-timer-circle {
+    background: #111827;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+  }
+  .ts-timer-time {
+    color: #F9FAFB;
+  }
+  .ts-timer-btn.secondary {
+    background: #374151;
+    color: #D1D5DB;
+  }
+  .ts-timer-btn.secondary:hover {
+    background: #4B5563;
+  }
+  .ts-action-btn.focus {
+    background: linear-gradient(135deg, #312E81, #3730A3);
+    color: #C7D2FE;
+  }
+  .ts-action-btn.reader {
+    background: linear-gradient(135deg, #064E3B, #065F46);
+    color: #A7F3D0;
+  }
+  .ts-empty-text {
+    color: #6B7280;
+  }
+  .ts-word-delete,
+  .ts-note-delete {
+    color: #4B5563;
+  }
+  .ts-word-delete:hover,
+  .ts-note-delete:hover {
+    color: #EF4444;
+    background: rgba(239,68,68,0.1);
+  }
 }

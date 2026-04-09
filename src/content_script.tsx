@@ -77,6 +77,32 @@ body.${P}-reader main,body.${P}-reader article,body.${P}-reader [role="main"]{ba
 `;
   document.head.appendChild(css);
 
+  // ── Settings ────────────────────────────────────────────
+
+  let enableToolbar = true;
+  let enableTracker = true;
+
+  function loadSettings() {
+    try {
+      chrome.storage.sync.get("ts_settings", (r) => {
+        const s = r.ts_settings || {};
+        enableToolbar = s.enableSelectionToolbar !== false;
+        enableTracker = s.enableReadingTracker !== false;
+      });
+    } catch { /* extension context gone */ }
+  }
+  loadSettings();
+
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "sync" && changes.ts_settings) {
+        const s = changes.ts_settings.newValue || {};
+        enableToolbar = s.enableSelectionToolbar !== false;
+        enableTracker = s.enableReadingTracker !== false;
+      }
+    });
+  } catch { /* extension context gone */ }
+
   // ── State ──────────────────────────────────────────────
 
   let bar: HTMLElement | null = null;
@@ -152,10 +178,16 @@ body.${P}-reader main,body.${P}-reader article,body.${P}-reader [role="main"]{ba
       bar!.appendChild(b);
     });
 
-    const w = 340;
-    const left = Math.max(10, Math.min(x - w / 2, window.innerWidth - w - 10));
+    const barW = 340;
+    const barH = 40;
+    const left = Math.max(10, Math.min(x - barW / 2, window.innerWidth - barW - 10));
+    // Show above selection, but if near top of viewport, show below
+    let top = y - barH - 12;
+    if (top < 10) top = y + 20;
+    // If near bottom, push up
+    if (top + barH > window.innerHeight - 10) top = window.innerHeight - barH - 10;
     bar.style.left = `${left}px`;
-    bar.style.top = `${Math.max(10, y - 48)}px`;
+    bar.style.top = `${top}px`;
     document.body.appendChild(bar);
   }
 
@@ -180,13 +212,30 @@ body.${P}-reader main,body.${P}-reader article,body.${P}-reader [role="main"]{ba
     dict = document.createElement("div");
     dict.className = `${P}-dict`;
 
+    // Build meanings HTML (up to 3)
+    const meanings = data.meanings || [];
+    let meaningsHtml = "";
+    if (meanings.length > 1) {
+      meaningsHtml = meanings.map((m: any, i: number) => `
+        <div style="margin-bottom:10px;${i > 0 ? "padding-top:10px;border-top:1px solid #F3F4F6;" : ""}">
+          ${m.partOfSpeech ? `<div class="${P}-dict-pos">${esc(m.partOfSpeech)}</div>` : ""}
+          <div class="${P}-dict-def">${esc(m.definition)}</div>
+          ${m.example ? `<div class="${P}-dict-ex">&ldquo;${esc(m.example)}&rdquo;</div>` : ""}
+        </div>
+      `).join("");
+    } else {
+      meaningsHtml = `
+        ${data.partOfSpeech ? `<div class="${P}-dict-pos">${esc(data.partOfSpeech)}</div>` : ""}
+        <div class="${P}-dict-def">${esc(data.definition || "No definition found")}</div>
+        ${data.example ? `<div class="${P}-dict-ex">&ldquo;${esc(data.example)}&rdquo;</div>` : ""}
+      `;
+    }
+
     dict.innerHTML = `
       <button class="${P}-dict-x">&times;</button>
       <div class="${P}-dict-w">${esc(data.word || sel)}</div>
       ${data.phonetic ? `<div class="${P}-dict-ph">${esc(data.phonetic)}</div>` : ""}
-      ${data.partOfSpeech ? `<div class="${P}-dict-pos">${esc(data.partOfSpeech)}</div>` : ""}
-      <div class="${P}-dict-def">${esc(data.definition || "No definition found")}</div>
-      ${data.example ? `<div class="${P}-dict-ex">&ldquo;${esc(data.example)}&rdquo;</div>` : ""}
+      ${meaningsHtml}
       <button class="${P}-dict-save">💾 Save to Vocabulary</button>
     `;
 
@@ -195,20 +244,21 @@ body.${P}-reader main,body.${P}-reader article,body.${P}-reader [role="main"]{ba
 
     dict.querySelector(`.${P}-dict-x`)!.addEventListener("click", clearDict);
     dict.querySelector(`.${P}-dict-save`)!.addEventListener("click", () => {
+      const w = data.word || sel.split(/\s+/)[0];
       chrome.runtime.sendMessage(
         {
           type: "ADD_WORD",
           word: {
             id: uid(),
-            word: data.word || sel.split(/\s+/)[0],
+            word: w,
             definition: data.definition || "",
             context: sel,
             url: location.href,
             timestamp: Date.now(),
           },
         },
-        () => {
-          toast(`"${data.word || sel}" saved!`);
+        (r: any) => {
+          toast(r?.duplicate ? `"${w}" already saved` : `"${w}" saved!`);
           clearDict();
         }
       );
@@ -225,15 +275,66 @@ body.${P}-reader main,body.${P}-reader article,body.${P}-reader [role="main"]{ba
 
   // ── Highlight ──────────────────────────────────────────
 
+  const COLORS: { cls: string; hex: string; label: string }[] = [
+    { cls: "", hex: "#FEF08A", label: "Yellow" },
+    { cls: `-green`, hex: "#BBF7D0", label: "Green" },
+    { cls: `-blue`, hex: "#BFDBFE", label: "Blue" },
+    { cls: `-pink`, hex: "#FBCFE8", label: "Pink" },
+  ];
+
   function doHighlight() {
     clearBar();
+    // Show color picker inline
+    const picker = document.createElement("div");
+    picker.className = `${P}-bar`;
+    picker.style.padding = "6px 10px";
+    picker.style.gap = "6px";
+    picker.style.alignItems = "center";
+    picker.innerHTML = `<span style="font-size:12px;font-weight:600;color:#6B7280;margin-right:4px">Color:</span>`;
+
+    COLORS.forEach((c) => {
+      const dot = document.createElement("button");
+      dot.style.cssText = `width:24px;height:24px;border-radius:50%;border:2px solid transparent;background:${c.hex};cursor:pointer;transition:transform .15s,border-color .15s;padding:0`;
+      dot.title = c.label;
+      dot.addEventListener("mouseenter", () => { dot.style.transform = "scale(1.2)"; });
+      dot.addEventListener("mouseleave", () => { dot.style.transform = "scale(1)"; });
+      dot.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        applyHighlight(c.cls, c.hex);
+        picker.remove();
+      });
+      picker.appendChild(dot);
+    });
+
+    // Position where bar was
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+    const rect = selection.getRangeAt(0).getBoundingClientRect();
+    picker.style.position = "fixed";
+    picker.style.zIndex = "2147483647";
+    picker.style.left = `${Math.max(10, rect.left)}px`;
+    picker.style.top = `${Math.max(10, rect.top - 46)}px`;
+    document.body.appendChild(picker);
+
+    // Auto-remove on click outside
+    const cleanup = (ev: MouseEvent) => {
+      if (!picker.contains(ev.target as Node)) {
+        picker.remove();
+        document.removeEventListener("mousedown", cleanup);
+      }
+    };
+    setTimeout(() => document.addEventListener("mousedown", cleanup), 50);
+  }
+
+  function applyHighlight(colorCls: string, colorHex: string) {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
 
     try {
       const range = selection.getRangeAt(0);
       const span = document.createElement("span");
-      span.className = `${P}-hl`;
+      span.className = `${P}-hl${colorCls ? ` ${P}-hl${colorCls}` : ""}`;
       const id = uid();
       span.dataset.tsId = id;
       range.surroundContents(span);
@@ -249,7 +350,7 @@ body.${P}-reader main,body.${P}-reader article,body.${P}-reader [role="main"]{ba
           url: location.href,
           pageTitle: document.title,
           timestamp: Date.now(),
-          color: "#FEF08A",
+          color: colorHex,
         },
       });
     } catch {
@@ -335,19 +436,26 @@ body.${P}-reader main,body.${P}-reader article,body.${P}-reader [role="main"]{ba
     const word = text.split(/\s+/)[0];
 
     chrome.runtime.sendMessage({ type: "LOOKUP_WORD", word }, (res: any) => {
+      const w = res?.word || word;
       chrome.runtime.sendMessage(
         {
           type: "ADD_WORD",
           word: {
             id: uid(),
-            word: res?.word || word,
+            word: w,
             definition: res?.definition || "",
             context: text,
             url: location.href,
             timestamp: Date.now(),
           },
         },
-        () => toast(`"${res?.word || word}" saved to vocabulary!`)
+        (r: any) => {
+          if (r?.duplicate) {
+            toast(`"${w}" is already in your vocabulary`);
+          } else {
+            toast(`"${w}" saved to vocabulary!`);
+          }
+        }
       );
     });
   }
@@ -371,6 +479,7 @@ body.${P}-reader main,body.${P}-reader article,body.${P}-reader [role="main"]{ba
   // ── Reading Time Tracker ───────────────────────────────
 
   function reportTime() {
+    if (!enableTracker) return;
     const now = Date.now();
     const sec = Math.round((now - lastReport) / 1000);
     if (sec > 5 && sec < 300) {
@@ -385,6 +494,16 @@ body.${P}-reader main,body.${P}-reader article,body.${P}-reader [role="main"]{ba
 
   // ── Event Listeners ────────────────────────────────────
 
+  // Elements where we should NOT show the toolbar
+  function isEditable(el: HTMLElement): boolean {
+    const tag = el.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    if (el.isContentEditable) return true;
+    if (el.closest('[contenteditable="true"]')) return true;
+    if (el.closest('[role="textbox"]')) return true;
+    return false;
+  }
+
   document.addEventListener("mouseup", (e) => {
     const t = e.target as HTMLElement;
     if (
@@ -395,9 +514,15 @@ body.${P}-reader main,body.${P}-reader article,body.${P}-reader [role="main"]{ba
       return;
 
     setTimeout(() => {
+      if (!enableToolbar) return;
+      // Don't show toolbar in editable fields
+      const active = document.activeElement as HTMLElement | null;
+      if (active && isEditable(active)) return;
+      if (isEditable(t)) return;
+
       const s = window.getSelection();
       const text = s?.toString().trim();
-      if (text && text.length > 0 && text.length < 500) {
+      if (text && text.length > 1 && text.length < 500) {
         sel = text;
         if (s && s.rangeCount > 0) selRange = s.getRangeAt(0).cloneRange();
         showBar(e.clientX, e.clientY);
@@ -433,9 +558,13 @@ body.${P}-reader main,body.${P}-reader article,body.${P}-reader [role="main"]{ba
     // extension context may be invalid
   }
 
-  // Reading time reporting
-  setInterval(reportTime, 30000);
-  window.addEventListener("beforeunload", reportTime);
+  // Reading time reporting with proper cleanup
+  const readingInterval = setInterval(reportTime, 30000);
+  const onUnload = () => {
+    reportTime();
+    clearInterval(readingInterval);
+  };
+  window.addEventListener("beforeunload", onUnload);
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) reportTime();
     else lastReport = Date.now();

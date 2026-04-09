@@ -9,14 +9,52 @@ interface TimerState {
   sessionsCompleted: number;
 }
 
-const FOCUS_DURATION = 25 * 60;
-const SHORT_BREAK = 5 * 60;
-const LONG_BREAK = 15 * 60;
+interface Settings {
+  focusDuration: number;
+  shortBreakDuration: number;
+  longBreakDuration: number;
+  enableSelectionToolbar: boolean;
+  enableReadingTracker: boolean;
+  showNotifications: boolean;
+}
+
+const DEFAULT_SETTINGS: Settings = {
+  focusDuration: 25,
+  shortBreakDuration: 5,
+  longBreakDuration: 15,
+  enableSelectionToolbar: true,
+  enableReadingTracker: true,
+  showNotifications: true,
+};
+
 const LONG_BREAK_INTERVAL = 4;
+
+let settings: Settings = { ...DEFAULT_SETTINGS };
+
+// Load settings from storage, re-read on change
+function loadSettings(): Promise<Settings> {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get("ts_settings", (r) => {
+      settings = { ...DEFAULT_SETTINGS, ...(r.ts_settings || {}) };
+      resolve(settings);
+    });
+  });
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync" && changes.ts_settings) {
+    settings = { ...DEFAULT_SETTINGS, ...(changes.ts_settings.newValue || {}) };
+  }
+});
+
+// Duration helpers that read from live settings
+function focusSec() { return settings.focusDuration * 60; }
+function shortBreakSec() { return settings.shortBreakDuration * 60; }
+function longBreakSec() { return settings.longBreakDuration * 60; }
 
 let timer: TimerState = {
   isRunning: false,
-  pausedRemaining: FOCUS_DURATION,
+  pausedRemaining: 25 * 60,
   endTime: 0,
   mode: "focus",
   sessionsCompleted: 0,
@@ -37,6 +75,9 @@ function timerResponse() {
     timeRemaining: getTimeRemaining(),
     mode: timer.mode,
     sessionsCompleted: timer.sessionsCompleted,
+    focusDuration: settings.focusDuration,
+    shortBreakDuration: settings.shortBreakDuration,
+    longBreakDuration: settings.longBreakDuration,
   };
 }
 
@@ -62,7 +103,7 @@ function resetTimer() {
   timer.isRunning = false;
   timer.endTime = 0;
   timer.mode = "focus";
-  timer.pausedRemaining = FOCUS_DURATION;
+  timer.pausedRemaining = focusSec();
   chrome.alarms.clear("ts-timer-complete");
   saveTimer();
   updateBadge();
@@ -83,22 +124,22 @@ function completeTimer() {
 
     if (timer.sessionsCompleted % LONG_BREAK_INTERVAL === 0) {
       timer.mode = "longBreak";
-      timer.pausedRemaining = LONG_BREAK;
+      timer.pausedRemaining = longBreakSec();
     } else {
       timer.mode = "shortBreak";
-      timer.pausedRemaining = SHORT_BREAK;
+      timer.pausedRemaining = shortBreakSec();
     }
   } else {
     timer.mode = "focus";
-    timer.pausedRemaining = FOCUS_DURATION;
+    timer.pausedRemaining = focusSec();
   }
 
   saveTimer();
 
-  // Flash badge to show completion
+  // Flash badge to show completion, then clear via alarm (setTimeout unreliable in SW)
   chrome.action.setBadgeText({ text: "done" });
   chrome.action.setBadgeBackgroundColor({ color: "#10B981" });
-  setTimeout(() => updateBadge(), 3000);
+  chrome.alarms.create("ts-badge-clear", { delayInMinutes: 0.05 }); // ~3 seconds
 }
 
 function updateBadge() {
@@ -120,6 +161,16 @@ function updateBadge() {
 
 function saveTimer() {
   chrome.storage.local.set({ ts_timer: timer });
+}
+
+// ── Storage Lock (prevents concurrent read-modify-write races) ─────
+
+let statsLock = false;
+async function withStatsLock<T>(fn: () => Promise<T>): Promise<T> {
+  while (statsLock) await new Promise((r) => setTimeout(r, 10));
+  statsLock = true;
+  try { return await fn(); }
+  finally { statsLock = false; }
 }
 
 // ── Stats ──────────────────────────────────────────────
@@ -179,7 +230,8 @@ async function getStats(): Promise<any> {
 }
 
 function updateStats(updates: Record<string, number>) {
-  getStats().then((stats) => {
+  withStatsLock(async () => {
+    const stats = await getStats();
     const updated = { ...stats };
     for (const [key, value] of Object.entries(updates)) {
       if (typeof updated[key] === "number") {
@@ -202,9 +254,28 @@ async function getWords(): Promise<any[]> {
 
 async function addWord(word: any) {
   const words = await getWords();
+  // Prevent duplicates (same word text, case-insensitive)
+  const exists = words.some(
+    (w: any) => w.word.toLowerCase() === (word.word || "").toLowerCase()
+  );
+  if (exists) {
+    // Update existing word's definition if it was empty
+    const idx = words.findIndex(
+      (w: any) => w.word.toLowerCase() === (word.word || "").toLowerCase()
+    );
+    if (idx >= 0 && !words[idx].definition && word.definition) {
+      words[idx].definition = word.definition;
+      words[idx].timestamp = Date.now();
+      chrome.storage.local.set({ ts_vocabulary: words });
+    }
+    return { duplicate: true };
+  }
   words.unshift(word);
+  // Cap at 1000 words to prevent storage overflow
+  if (words.length > 1000) words.length = 1000;
   chrome.storage.local.set({ ts_vocabulary: words });
   updateStats({ wordsAdded: 1 });
+  return { duplicate: false };
 }
 
 async function deleteWord(id: string) {
@@ -227,6 +298,8 @@ async function getNotes(): Promise<any[]> {
 async function addNote(note: any) {
   const notes = await getNotes();
   notes.unshift(note);
+  // Cap at 500 notes to prevent storage overflow
+  if (notes.length > 500) notes.length = 500;
   chrome.storage.local.set({ ts_notes: notes });
   updateStats({ highlightsAdded: 1 });
 }
@@ -267,6 +340,9 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "ts-timer-complete") {
     completeTimer();
+  }
+  if (alarm.name === "ts-badge-clear") {
+    updateBadge();
   }
 });
 
@@ -353,9 +429,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       // Vocabulary
       case "GET_WORDS":
         return await getWords();
-      case "ADD_WORD":
-        await addWord(message.word);
-        return { success: true };
+      case "ADD_WORD": {
+        const result = await addWord(message.word);
+        return { success: true, ...result };
+      }
       case "DELETE_WORD":
         await deleteWord(message.id);
         return { success: true };
@@ -370,14 +447,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         await deleteNote(message.id);
         return { success: true };
 
+      // Settings
+      case "GET_SETTINGS":
+        return { ...settings };
+
       // Focus
       case "GET_FOCUS_STATE":
         return { active: false };
 
-      // Dictionary lookup (free API)
+      // Dictionary lookup (free API) - returns multiple meanings
       case "LOOKUP_WORD": {
         const word = (message.word || "").trim().toLowerCase();
-        if (!word) return { word: "", definition: "" };
+        if (!word) return { word: "", definition: "", meanings: [] };
         try {
           const resp = await fetch(
             `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`
@@ -385,19 +466,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           if (resp.ok) {
             const data = await resp.json();
             const entry = data[0];
-            const meaning = entry.meanings?.[0];
+            const meanings = (entry.meanings || []).slice(0, 3).map((m: any) => ({
+              partOfSpeech: m.partOfSpeech || "",
+              definition: m.definitions?.[0]?.definition || "",
+              example: m.definitions?.[0]?.example || "",
+            }));
+            const first = meanings[0] || {};
             return {
               word: entry.word,
-              phonetic: entry.phonetic || "",
-              partOfSpeech: meaning?.partOfSpeech || "",
-              definition:
-                meaning?.definitions?.[0]?.definition || "No definition found",
-              example: meaning?.definitions?.[0]?.example || "",
+              phonetic: entry.phonetic || entry.phonetics?.[0]?.text || "",
+              partOfSpeech: first.partOfSpeech,
+              definition: first.definition || "No definition found",
+              example: first.example || "",
+              meanings,
             };
           }
-          return { word, definition: "Definition not found" };
+          return { word, definition: "Definition not found", meanings: [] };
         } catch {
-          return { word, definition: "Unable to look up word (offline?)" };
+          return { word, definition: "Unable to look up word (offline?)", meanings: [] };
         }
       }
 
@@ -411,6 +497,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 // ── Restore State on Startup ───────────────────────────
+
+loadSettings().then(() => {
+  // Update pausedRemaining if timer is idle at default focus
+  if (!timer.isRunning && timer.mode === "focus") {
+    timer.pausedRemaining = focusSec();
+  }
+});
 
 chrome.storage.local.get("ts_timer", (result) => {
   if (result.ts_timer) {
